@@ -86,7 +86,7 @@ region = st.sidebar.selectbox(
 # Select frequency
 freq = st.sidebar.selectbox(
     "Time Scale", 
-    ['M','W','Q','Y'],
+    ['M','Q','Y'],
     format_func=lambda x: {'M':'Monthly','Q':'Seasonal','Y':'Yearly'}[x]
 )
 
