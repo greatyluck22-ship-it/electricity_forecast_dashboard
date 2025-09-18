@@ -7,24 +7,30 @@ import os
 st.set_page_config(page_title="Electricity Forecast Dashboard", layout="wide")
 
 # -----------------------
-# Load datasets dynamically
+# Initialize session state
+# -----------------------
+if "datasets" not in st.session_state:
+    st.session_state.datasets = {}
+
+# -----------------------
+# Load datasets dynamically if first run
 # -----------------------
 data_folder = "data"
-datasets = {}
-for file in os.listdir(data_folder):
-    if file.endswith(".csv"):
-        region_name = file.split(".")[0]
-        df = pd.read_csv(os.path.join(data_folder, file))
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df.set_index('timestamp', inplace=True)
-        datasets[region_name] = df
+if not st.session_state.datasets:
+    for file in os.listdir(data_folder):
+        if file.endswith(".csv"):
+            region_name = file.split(".")[0]
+            df = pd.read_csv(os.path.join(data_folder, file))
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df.set_index('timestamp', inplace=True)
+            st.session_state.datasets[region_name] = df
 
 # -----------------------
 # Load models dynamically
 # -----------------------
 models_folder = "models"
 models = {}
-for region in datasets.keys():
+for region in st.session_state.datasets.keys():
     model_path = os.path.join(models_folder, f"{region}_best_model.pkl")
     if os.path.exists(model_path):
         models[region] = joblib.load(model_path)
@@ -56,17 +62,6 @@ def create_chart(df, freq, region):
     return fig
 
 # -----------------------
-# Streamlit Sidebar
-# -----------------------
-st.sidebar.title("Settings")
-region = st.sidebar.selectbox("Select Region", list(datasets.keys()))
-freq = st.sidebar.selectbox(
-    "Time Scale", 
-    ['M','W','Q','Y'],
-    format_func=lambda x: {'M':'Monthly','W':'Weekly','Q':'Seasonal','Y':'Yearly'}[x]
-)
-
-# -----------------------
 # Upload new CSV for additional regions
 # -----------------------
 st.sidebar.subheader("Add New Region Data")
@@ -77,11 +72,26 @@ if uploaded_file:
         df_new = pd.read_csv(uploaded_file)
         df_new['timestamp'] = pd.to_datetime(df_new['timestamp'])
         df_new.set_index('timestamp', inplace=True)
-        datasets[new_region.lower()] = df_new
+        st.session_state.datasets[new_region.lower()] = df_new
         st.success(f"Region '{new_region}' added successfully!")
+
+# -----------------------
+# Select region from updated session state
+# -----------------------
+region = st.sidebar.selectbox(
+    "Select Region", 
+    list(st.session_state.datasets.keys())
+)
+
+# Select frequency
+freq = st.sidebar.selectbox(
+    "Time Scale", 
+    ['M','W','Q','Y'],
+    format_func=lambda x: {'M':'Monthly','W':'Weekly','Q':'Seasonal','Y':'Yearly'}[x]
+)
 
 # -----------------------
 # Display Chart
 # -----------------------
 st.title("Electricity Forecast Dashboard")
-st.plotly_chart(create_chart(datasets[region], freq, region), use_container_width=True)
+st.plotly_chart(create_chart(st.session_state.datasets[region], freq, region), use_container_width=True)
