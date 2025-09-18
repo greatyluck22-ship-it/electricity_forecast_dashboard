@@ -3,32 +3,29 @@ import pandas as pd
 import joblib
 import plotly.graph_objs as go
 import os
-from glob import glob
 
 st.set_page_config(page_title="Electricity Forecast Dashboard", layout="wide")
 
 # -----------------------
 # Load datasets dynamically
 # -----------------------
+data_folder = "data"
 datasets = {}
-csv_files = glob("data/*.csv")  # ✅ load all CSVs from /data
-for file_path in csv_files:
-    region = os.path.splitext(os.path.basename(file_path))[0]  # e.g. "kigoma"
-    df = pd.read_csv(file_path)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.set_index('timestamp', inplace=True)
-    df['region'] = region  # ✅ add region column
-    datasets[region] = df
-
-# ✅ Combine all into one global dataset
-global_df = pd.concat(datasets.values(), axis=0)
+for file in os.listdir(data_folder):
+    if file.endswith(".csv"):
+        region_name = file.split(".")[0]
+        df = pd.read_csv(os.path.join(data_folder, file))
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df.set_index('timestamp', inplace=True)
+        datasets[region_name] = df
 
 # -----------------------
-# Load models (optional)
+# Load models dynamically
 # -----------------------
+models_folder = "models"
 models = {}
 for region in datasets.keys():
-    model_path = os.path.join("models", f"{region}_best_model.pkl")
+    model_path = os.path.join(models_folder, f"{region}_best_model.pkl")
     if os.path.exists(model_path):
         models[region] = joblib.load(model_path)
 
@@ -62,38 +59,29 @@ def create_chart(df, freq, region):
 # Streamlit Sidebar
 # -----------------------
 st.sidebar.title("Settings")
-
-# ✅ Add "All Regions (Global)" option
-region_options = list(datasets.keys()) + ["All Regions"]
-region = st.sidebar.selectbox("Select Region", region_options)
-
+region = st.sidebar.selectbox("Select Region", list(datasets.keys()))
 freq = st.sidebar.selectbox(
-    "Time Scale",
+    "Time Scale", 
     ['M','W','Q','Y'],
     format_func=lambda x: {'M':'Monthly','W':'Weekly','Q':'Seasonal','Y':'Yearly'}[x]
 )
 
 # -----------------------
+# Upload new CSV for additional regions
+# -----------------------
+st.sidebar.subheader("Add New Region Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+if uploaded_file:
+    new_region = st.sidebar.text_input("Enter Region Name")
+    if new_region and st.sidebar.button("Add Region"):
+        df_new = pd.read_csv(uploaded_file)
+        df_new['timestamp'] = pd.to_datetime(df_new['timestamp'])
+        df_new.set_index('timestamp', inplace=True)
+        datasets[new_region.lower()] = df_new
+        st.success(f"Region '{new_region}' added successfully!")
+
+# -----------------------
 # Display Chart
 # -----------------------
 st.title("Electricity Forecast Dashboard")
-
-if region == "All Regions":
-    # Plot global aggregated demand
-    agg_df = global_df.groupby('timestamp').sum().resample(freq)['demand'].mean().reset_index()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=agg_df['timestamp'],
-        y=agg_df['demand'],
-        mode='lines+markers',
-        name="Global Demand"
-    ))
-    fig.update_layout(
-        title=f"All Regions Electricity Demand - {freq} View",
-        xaxis_title="Time",
-        yaxis_title="Demand (kW)",
-        hovermode="x unified"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.plotly_chart(create_chart(datasets[region], freq, region), use_container_width=True)
+st.plotly_chart(create_chart(datasets[region], freq, region), use_container_width=True)
