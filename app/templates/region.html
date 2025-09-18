@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>{{ region }} Electricity Demand</h2>
+<form method="get">
+    <label>Time Scale:</label>
+    <select name="freq" onchange="this.form.submit()">
+        <option value="M" {% if request.args.get('freq')=='M' %}selected{% endif %}>Monthly</option>
+        <option value="W" {% if request.args.get('freq')=='W' %}selected{% endif %}>Weekly</option>
+        <option value="Q" {% if request.args.get('freq')=='Q' %}selected{% endif %}>Seasonal</option>
+        <option value="Y" {% if request.args.get('freq')=='Y' %}selected{% endif %}>Yearly</option>
+    </select>
+</form>
+<div id="graph"></div>
+<script>
+    var graphs = {{ graphJSON | safe }};
+    Plotly.newPlot('graph', graphs.data, graphs.layout);
+</script>
+{% endblock %}

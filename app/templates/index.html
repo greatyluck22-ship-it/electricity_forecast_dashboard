@@ -1,0 +1,9 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Electricity Forecast Dashboard</h2>
+<div id="graph"></div>
+<script>
+    var graphs = {{ graphJSON | safe }};
+    Plotly.newPlot('graph', graphs.data, graphs.layout);
+</script>
+{% endblock %}
