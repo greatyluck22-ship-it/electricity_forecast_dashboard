@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
 import joblib
@@ -13,7 +12,8 @@ st.set_page_config(page_title="Electricity Forecast Dashboard", layout="wide")
 files = ['kigoma.csv','katavi.csv','rukwa.csv']
 datasets = {}
 for file in files:
-    df = pd.read_csv(f"app/data/{file}")
+    data_path = os.path.join("data", file)  # ✅ fixed path
+    df = pd.read_csv(data_path)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df.set_index('timestamp', inplace=True)
     datasets[file.split('.')[0]] = df
@@ -23,7 +23,7 @@ for file in files:
 # -----------------------
 models = {}
 for region in datasets.keys():
-    model_path = f"app/models/{region}_best_model.pkl"
+    model_path = os.path.join("models", f"{region}_best_model.pkl")  # ✅ fixed path
     if os.path.exists(model_path):
         models[region] = joblib.load(model_path)
 
@@ -58,7 +58,8 @@ def create_chart(df, freq, region):
 # -----------------------
 st.sidebar.title("Settings")
 region = st.sidebar.selectbox("Select Region", list(datasets.keys()))
-freq = st.sidebar.selectbox("Time Scale", ['M','W','Q','Y'], format_func=lambda x: {'M':'Monthly','W':'Weekly','Q':'Seasonal','Y':'Yearly'}[x])
+freq = st.sidebar.selectbox("Time Scale", ['M','W','Q','Y'],
+    format_func=lambda x: {'M':'Monthly','W':'Weekly','Q':'Seasonal','Y':'Yearly'}[x])
 
 # -----------------------
 # Display Chart
