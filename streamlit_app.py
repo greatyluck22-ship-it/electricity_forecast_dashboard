@@ -3,6 +3,7 @@ import pandas as pd
 import joblib
 import plotly.graph_objs as go
 import os
+import numpy as np
 
 st.set_page_config(page_title="Electricity Forecast Dashboard", layout="wide")
 
@@ -13,7 +14,7 @@ if "datasets" not in st.session_state:
     st.session_state.datasets = {}
 
 # -----------------------
-# Load datasets dynamically if first run
+# Load datasets
 # -----------------------
 data_folder = "data"
 if not st.session_state.datasets:
@@ -26,7 +27,7 @@ if not st.session_state.datasets:
             st.session_state.datasets[region_name] = df
 
 # -----------------------
-# Load models dynamically
+# Load models
 # -----------------------
 models_folder = "models"
 models = {}
@@ -36,25 +37,99 @@ for region in st.session_state.datasets.keys():
         models[region] = joblib.load(model_path)
 
 # -----------------------
-# Aggregate by frequency
+# Aggregation
 # -----------------------
 def aggregate_df(df, freq):
     return df.resample(freq)['demand'].mean().reset_index()
 
 # -----------------------
-# Create Plotly chart
+# Forecast future demand range
 # -----------------------
-def create_chart(df, freq, region):
+def forecast_range(model, df, freq, periods=12):
+    last_date = df.index.max()
+
+    if freq == 'M':
+        future_dates = pd.date_range(last_date, periods=periods + 1, freq='MS')[1:]
+    elif freq == 'Q':
+        future_dates = pd.date_range(last_date, periods=periods + 1, freq='QS')[1:]
+    elif freq == 'Y':
+        future_dates = pd.date_range(last_date, periods=periods + 1, freq='YS')[1:]
+
+    X_pred = pd.DataFrame({
+        'month': future_dates.month,
+        'quarter': future_dates.quarter,
+        'year': future_dates.year
+    })
+
+    # Predict multiple times with noise to simulate uncertainty
+    preds = []
+    for _ in range(50):  # simulate 50 samples for range
+        noise = np.random.normal(0, 0.5, len(X_pred))  # small noise
+        pred = model.predict(X_pred) + noise
+        preds.append(pred)
+
+    preds = np.array(preds)
+    lower = np.percentile(preds, 10, axis=0)
+    upper = np.percentile(preds, 90, axis=0)
+
+    forecast_df = pd.DataFrame({
+        'timestamp': future_dates,
+        'lower': lower,
+        'upper': upper,
+        'mean': preds.mean(axis=0)
+    })
+
+    return forecast_df
+
+# -----------------------
+# Chart
+# -----------------------
+def create_chart(df, model, freq, region):
     agg_df = aggregate_df(df, freq)
+
     fig = go.Figure()
+
+    # Historical
     fig.add_trace(go.Scatter(
         x=agg_df['timestamp'],
         y=agg_df['demand'],
         mode='lines+markers',
-        name=f'{region.capitalize()} Demand'
+        name=f'{region.capitalize()} Historical Demand'
     ))
+
+    # Forecast if model is available
+    if model is not None:
+        forecast_df = forecast_range(model, df, freq)
+        fig.add_trace(go.Scatter(
+            x=forecast_df['timestamp'],
+            y=forecast_df['mean'],
+            mode='lines+markers',
+            name="Forecast (mean)",
+            line=dict(color='green', dash='dash')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=forecast_df['timestamp'],
+            y=forecast_df['upper'],
+            mode='lines',
+            name='Forecast Upper Bound',
+            line=dict(width=0),
+            showlegend=False
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=forecast_df['timestamp'],
+            y=forecast_df['lower'],
+            mode='lines',
+            name='Forecast Lower Bound',
+            fill='tonexty',
+            fillcolor='rgba(0,200,0,0.2)',
+            line=dict(width=0),
+            showlegend=True
+        ))
+
     fig.update_layout(
-        title=f'{region.capitalize()} Electricity Demand - {freq} View',
+        title=f"{region.capitalize()} Electricity Demand Forecast - {freq} View",
         xaxis_title='Time',
         yaxis_title='Demand (kW)',
         hovermode='x unified'
@@ -62,7 +137,7 @@ def create_chart(df, freq, region):
     return fig
 
 # -----------------------
-# Upload new CSV for additional regions
+# Upload New Region
 # -----------------------
 st.sidebar.subheader("Add New Region Data")
 uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
@@ -76,22 +151,18 @@ if uploaded_file:
         st.success(f"Region '{new_region}' added successfully!")
 
 # -----------------------
-# Select region from updated session state
+# Sidebar Controls
 # -----------------------
-region = st.sidebar.selectbox(
-    "Select Region", 
-    list(st.session_state.datasets.keys())
-)
-
-# Select frequency
-freq = st.sidebar.selectbox(
-    "Time Scale", 
-    ['M','Q','Y'],
-    format_func=lambda x: {'M':'Monthly','Q':'Seasonal','Y':'Yearly'}[x]
-)
+region = st.sidebar.selectbox("Select Region", list(st.session_state.datasets.keys()))
+freq = st.sidebar.selectbox("Time Scale", ['M', 'Q', 'Y'],
+                            format_func=lambda x: {'M': 'Monthly', 'Q': 'Seasonal', 'Y': 'Yearly'}[x])
 
 # -----------------------
-# Display Chart
+# Main Chart
 # -----------------------
-st.title("Electricity Forecast Dashboard")
-st.plotly_chart(create_chart(st.session_state.datasets[region], freq, region), use_container_width=True)
+st.title("🔌 Electricity Forecast Dashboard")
+df = st.session_state.datasets[region]
+model = models.get(region)
+
+fig = create_chart(df, model, freq, region)
+st.plotly_chart(fig, use_container_width=True)
